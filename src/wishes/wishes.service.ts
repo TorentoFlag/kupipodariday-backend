@@ -100,10 +100,6 @@ export class WishesService {
   async copyWish(id: number, owner: User) {
     const wish = await this.findOne({ id });
 
-    if (wish.owner.id === owner.id) {
-      throw new ConflictException('Вы не можете скопировать свое желание');
-    }
-
     const copiedWish = this.wishRepository.create({
       name: wish.name,
       link: wish.link,

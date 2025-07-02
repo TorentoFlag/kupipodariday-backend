@@ -22,17 +22,6 @@ export class UsersService {
   async create(dto: CreateUserDto) {
     const { email, username, password } = dto;
 
-    const existingUser = await this.userRepository.findOneBy([
-      { email },
-      { username },
-    ]);
-
-    if (existingUser) {
-      throw new ConflictException(
-        'Пользователь с таким email или username уже зарегистрирован',
-      );
-    }
-
     const hashedPassword = await this.hashService.hashPassword(password);
 
     const user = this.userRepository.create({
@@ -40,9 +29,16 @@ export class UsersService {
       password: hashedPassword,
     });
 
-    const savedUser = await this.userRepository.save(user);
-
-    return savedUser;
+    try {
+      const savedUser = await this.userRepository.save(user);
+      delete savedUser.password;
+      return savedUser;
+    } catch (error) {
+      if (error.code === '23505') {
+        throw new NotFoundException('Пользователь с таким email или username уже зарегистрирован');
+      }
+      throw error;
+    }
   }
 
   async findOne(options: FindOneOptions<User>, withPassword = false) {
@@ -85,37 +81,21 @@ export class UsersService {
   async update(id: number, dto: UpdateUserDto) {
     const { password, username, email } = dto;
 
-    if (username) {
-      const usernameOwner = await this.userRepository.findOneBy({ username });
-
-      if (usernameOwner && usernameOwner.id !== id) {
-        throw new ConflictException(
-          'Пользователь с таким username уже существует',
-        );
-      }
-    }
-
-    if (email) {
-      const emailOwner = await this.userRepository.findOneBy({ email });
-
-      if (emailOwner && emailOwner.id !== id) {
-        throw new ConflictException(
-          'Пользователь с таким email уже существует',
-        );
-      }
-    }
-
-    if (password) {
+    try {
       const hashedPassword = await this.hashService.hashPassword(password);
       await this.userRepository.update(id, {
         ...dto,
         password: hashedPassword,
       });
-    } else {
-      await this.userRepository.update(id, dto);
+      return this.findOneBy({ id });
+    } catch (error) {
+      if (error.code === '23505') {
+        throw new ConflictException('Пользователь с такими данными уже существует');
+      }
+      throw error;
     }
 
-    return this.findOneBy({ id });
+
   }
 
   async getUserWishes(username: string) {
